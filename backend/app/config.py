@@ -34,12 +34,15 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1"
     openai_fast_model: str = "gpt-4.1-mini"
     ai_timeout_seconds: float = 30.0
+    # AI agents (tool-calling specialists) answer customers whenever an LLM key is configured.
+    # false = classic mode: LLM only classifies and drafts; replies come from the rules engine.
+    agent_mode: bool = True
     # Below this classifier confidence a ticket is never auto-resolved.
     auto_resolve_min_confidence: float = 0.80
 
     # --- automation controls (rollout switches, see docs/PILOT_PLAYBOOK) ---
     # Comma list of intents allowed to auto-resolve. Month-2 pilot = "order_status".
-    auto_resolve_intents: str = "order_status,product_availability,store_policy"
+    auto_resolve_intents: str = "order_status,product_availability,store_policy,technical_support,other"
     # shadow = AI runs, drafts everything, sends nothing (parallel-run validation)
     # live   = AI sends auto-resolutions for allowed intents
     automation_mode: str = "live"

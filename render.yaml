@@ -27,4 +27,4 @@ services:
       - key: AUTOMATION_MODE
         value: live
       - key: AUTO_RESOLVE_INTENTS
-        value: order_status,product_availability,store_policy
+        value: order_status,product_availability,store_policy,technical_support,other

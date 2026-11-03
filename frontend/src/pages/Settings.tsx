@@ -4,7 +4,7 @@ import { useSession } from '../main'
 
 type Config = {
   environment: string; ai_provider_configured: string; ai_provider_active: string; ai_models: Record<string, string[]>
-  automation_mode: string; auto_resolve_intents: string[]; auto_resolve_min_confidence: number; refund_auto_approve_limit: number
+  automation_mode: string; agent_mode: boolean; auto_resolve_intents: string[]; auto_resolve_min_confidence: number; refund_auto_approve_limit: number
   connectors: Record<string, string>; email_transport: string; sms_transport: string; knowledge_passages: number
 }
 type Passage = { id: string; doc: string; title: string; text: string }
@@ -42,6 +42,7 @@ export default function Settings() {
             <dt>Paths answered by AI</dt><dd>{cfg.auto_resolve_intents.map(label).join(', ') || 'None'}</dd>
             <dt>Minimum confidence</dt><dd className="num">{Math.round(cfg.auto_resolve_min_confidence * 100)}%</dd>
             <dt>Refund auto-approval limit</dt><dd className="num">{cfg.refund_auto_approve_limit ? `$${cfg.refund_auto_approve_limit}` : 'Off: every refund needs a supervisor'}</dd>
+            <dt>Customer replies</dt><dd><b>{cfg.agent_mode ? 'AI agents (tool-calling specialists)' : 'Rules engine templates'}</b></dd>
             <dt>AI engine</dt><dd>{live ? `${label(cfg.ai_provider_active)} (${cfg.ai_models[cfg.ai_provider_active]?.join(', ')})` : `Rules engine${cfg.ai_provider_configured !== 'rules' ? ` (${cfg.ai_provider_configured} key not set)` : ''}`}</dd>
           </dl>
           {!live && <p className="small" style={{ background: 'var(--beacon-soft)', padding: '8px 10px', borderRadius: 6 }}>Running on the built-in rules engine. Set <code>GROQ_API_KEY</code> (free) for AI classification and drafting.</p>}

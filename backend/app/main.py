@@ -57,6 +57,7 @@ for r in (channels.router, console.router, analytics.router, admin.router):
 def health():
     p = get_provider()
     return {"status": "ok", "ai_provider": p.name if p else "rules", "mode": get_settings().automation_mode,
+            "agents": bool(p and get_settings().agent_mode),
             "demo": get_settings().seed_demo_data}
 
 

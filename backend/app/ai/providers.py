@@ -5,6 +5,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from functools import lru_cache
 
 from ..config import get_settings
@@ -16,8 +17,38 @@ class ProviderError(RuntimeError):
     pass
 
 
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass
+class AssistantTurn:
+    """One model turn in an agent loop. `message` is the turn in OpenAI chat format, ready to append."""
+    content: str
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    message: dict = field(default_factory=dict)
+
+
+def _parse_args(raw) -> dict:
+    if isinstance(raw, dict):
+        return raw
+    try:
+        v = json.loads(raw or "{}")
+        return v if isinstance(v, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
 class LLMProvider(ABC):
     name = "abstract"
+    model = ""
+
+    def chat(self, messages: list[dict], tools: list[dict], fast: bool = False) -> AssistantTurn:
+        """Tool-calling turn. `messages` and `tools` are OpenAI chat format."""
+        raise ProviderError(f"{self.name} does not support tool calling")
 
     @abstractmethod
     def structured(self, system: str, user: str, schema: dict, fast: bool = True) -> dict: ...
@@ -59,6 +90,58 @@ class AnthropicProvider(LLMProvider):
         except Exception as e:
             raise ProviderError(str(e)) from e
         return "".join(getattr(b, "text", "") for b in resp.content).strip()
+
+
+def _to_anthropic(messages: list[dict]) -> tuple[str, list[dict]]:
+    system, out = "", []
+    for m in messages:
+        role = m["role"]
+        if role == "system":
+            system += m["content"] + "\n\n"
+        elif role == "tool":
+            block = {"type": "tool_result", "tool_use_id": m["tool_call_id"], "content": m["content"]}
+            if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list):
+                out[-1]["content"].append(block)
+            else:
+                out.append({"role": "user", "content": [block]})
+        elif role == "assistant":
+            blocks = [{"type": "text", "text": m["content"]}] if m.get("content") else []
+            for tc in m.get("tool_calls") or []:
+                blocks.append({"type": "tool_use", "id": tc["id"], "name": tc["function"]["name"],
+                               "input": _parse_args(tc["function"]["arguments"])})
+            out.append({"role": "assistant", "content": blocks or m.get("content") or ""})
+        else:
+            if out and out[-1]["role"] == "user":  # anthropic needs alternating roles
+                prev = out[-1]["content"]
+                text = prev if isinstance(prev, str) else ""
+                if isinstance(prev, list):
+                    prev.append({"type": "text", "text": m["content"]})
+                    continue
+                out[-1]["content"] = text + "\n\n" + m["content"]
+            else:
+                out.append({"role": "user", "content": m["content"]})
+    return system.strip(), out
+
+
+def _anthropic_chat(self, messages, tools, fast=False):
+    system, msgs = _to_anthropic(messages)
+    atools = [{"name": t["function"]["name"], "description": t["function"].get("description", ""),
+               "input_schema": t["function"]["parameters"]} for t in tools]
+    try:
+        resp = self.client.messages.create(model=self.fast_model if fast else self.model, max_tokens=1500,
+                                           system=system, messages=msgs, tools=atools,
+                                           tool_choice={"type": "any"} if atools else {"type": "auto"})
+    except Exception as e:
+        raise ProviderError(str(e)) from e
+    text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text").strip()
+    calls = [ToolCall(b.id, b.name, dict(b.input)) for b in resp.content if getattr(b, "type", "") == "tool_use"]
+    msg = {"role": "assistant", "content": text,
+           "tool_calls": [{"id": c.id, "type": "function", "function": {"name": c.name, "arguments": json.dumps(c.arguments)}}
+                          for c in calls]} if calls else {"role": "assistant", "content": text}
+    return AssistantTurn(text, calls, msg)
+
+
+AnthropicProvider.chat = _anthropic_chat
 
 
 class OpenAICompatibleProvider(LLMProvider):  # noqa: D101
@@ -113,6 +196,30 @@ class OpenAICompatibleProvider(LLMProvider):  # noqa: D101
             return self._chat(fast, system, user, max(max_tokens, 2000))
         except Exception as e:
             raise ProviderError(str(e)) from e
+
+    def chat(self, messages, tools, fast=False):
+        last: Exception | None = None
+        # "required" forces a tool call every turn (the agent always ends via respond_to_customer);
+        # some free models reject it, so fall back to "auto".
+        for choice in ("required", "auto"):
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.fast_model if fast else self.model, max_tokens=2000, messages=messages,
+                    tools=tools or None, tool_choice=choice if tools else None, extra_body=self.extra or None)
+                m = resp.choices[0].message
+                calls = [ToolCall(tc.id, tc.function.name, _parse_args(tc.function.arguments))
+                         for tc in (m.tool_calls or [])]
+                msg = {"role": "assistant", "content": m.content or ""}
+                if calls:
+                    msg["tool_calls"] = [{"id": c.id, "type": "function",
+                                          "function": {"name": c.name, "arguments": json.dumps(c.arguments)}}
+                                         for c in calls]
+                return AssistantTurn((m.content or "").strip(), calls, msg)
+            except Exception as e:
+                last = e
+                if "429" in str(e) or "rate" in str(e).lower():
+                    break
+        raise ProviderError(str(last))
 
 
 class OpenAIProvider(OpenAICompatibleProvider):

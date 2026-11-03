@@ -74,13 +74,13 @@ export default function ChatWidget() {
       ) : (
         <>
           <div className="chat-log" aria-live="polite" ref={logRef}>
-            <div className="chat-msg bot"><span className="by">Beacon assistant</span>{session.greeting}</div>
+            <div className="chat-msg bot"><span className="by">Beacon AI</span>{session.greeting}</div>
             {log.messages.map(m => (
               <div key={m.id} className={`chat-msg ${m.from}`}>
-                {m.from !== 'customer' && <span className="by">{m.from === 'agent' ? m.author : 'Beacon assistant'}</span>}{m.body}
+                {m.from !== 'customer' && <span className="by">{m.author || 'Beacon AI'}</span>}{m.body}
               </div>
             ))}
-            {sending && <div className="typing">Checking our systems…</div>}
+            {sending && <div className="typing">Beacon AI is checking orders, stock and policies…</div>}
             {answered && log.ticket_ref && rated !== log.ticket_ref && !sending && (
               <div className="chat-msg bot"><span className="by">Did that answer your question?</span>
                 <div className="stars" role="group" aria-label="Rate this answer from 1 to 5">{[1, 2, 3, 4, 5].map(n => <button key={n} onClick={() => rate(n)}>{n}</button>)}</div>

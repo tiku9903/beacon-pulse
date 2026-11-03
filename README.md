@@ -6,7 +6,52 @@ AI-powered customer service automation for Beacon Lighting. Runs on free AI (Gro
 2. **Identify**: the customer is matched in Customer 360 / CRM.
 3. **Classify**: intent, entities, sentiment, urgency and a safety scan are worked out.
 4. **Route**: the enquiry gets a priority (Safety > Trade/VIP > sentiment), is assigned by skill to the least-loaded agent, and gets an SLA clock.
-5. **Resolve**: routine questions are answered instantly. Everything else reaches an agent with an AI draft ready. Refunds, returns and replacements wait for a human to sign off.
+5. **Resolve**: AI specialist agents answer the customer using live order, stock and policy tools, and submit refunds, returns and warranty claims for a human to approve. Safety issues go to people at P1 with fixed safety advice.
+
+## The AI agent engine
+
+When an AI key is set (Groq by default, free), every customer message is handled by a multi-agent system. If no key is set, or the AI is unavailable, the rules engine answers instead, so tickets are never lost.
+
+```
+customer ─▶ Triage (intent, sentiment, safety) ─▶ Specialist agent ⇄ tools ─▶ Guardrail ─▶ reply / human
+```
+
+**Specialists.** Each specialist has its own instructions and only the tools its job needs (`backend/app/agents/specialists.py`):
+
+| Specialist | Handles | Tools |
+|---|---|---|
+| Order agent | Where is my order, delivery, Click & Collect | `find_orders`, `get_customer_profile`, `search_policy` |
+| Product agent | Stock, price, restock | `check_product_stock`, `search_policy` |
+| Support agent | Policies and troubleshooting | `search_policy`, `check_product_stock`, `find_orders` |
+| Returns & refunds agent | Returns, refunds, double charges | `check_return_eligibility`, `create_return_request`, `create_refund_request` |
+| Warranty agent | Faulty products | `check_warranty`, `create_warranty_claim` |
+| Trade desk agent | Trade customers, bulk orders | `get_customer_profile`, `check_product_stock`, `find_orders` |
+| Concierge agent | Anything unclear | read-only tools, plus transfer to a specialist |
+
+Every agent can also call `escalate_safety`, `handoff_to_human` and `transfer_to_specialist`. It ends each turn with `respond_to_customer` and an outcome: resolved, needs_info, pending_review or handed_off.
+
+**Business rules live in the tools, not the prompt** (`backend/app/agents/tools.py`):
+- Orders are only shown to the email they belong to. In chat, the customer must type the order number, and tracking numbers are emailed rather than shown.
+- The 30-day return window and warranty terms are calculated in code.
+- Refunds can't exceed the order total and are only ever *submitted* for supervisor approval.
+
+**Guardrail** (`backend/app/agents/runtime.py`). Before a customer sees a reply, a code check rejects:
+- any order number, dollar amount or tracking code that no tool returned;
+- any claim that a refund, return or replacement was approved;
+- any wiring instructions.
+
+A rejected reply goes back to the agent with the reason, so it can fix it.
+
+**Safety.** If the agent spots a hazard the keyword scan missed, it escalates. The customer gets the fixed, approved safety wording, never AI-written text, and the case goes to the Safety team at P1.
+
+**Memory.** Agents see the whole conversation, including earlier questions in the same chat. Once a human agent has replied on a ticket, the AI only drafts and never sends over them.
+
+**What the team sees.** Each ticket shows:
+- an **AI agent** panel with the specialist and every tool call;
+- an internal summary note for the human;
+- every guardrail block in the timeline.
+
+**Try it** (with `GROQ_API_KEY` set): on `/help`, chat as `priya.raman@example.com` and say *"my ceiling fan stopped working"*. When the agent asks for the order number, reply with `BL100045826`. The Warranty agent checks the warranty, submits a replacement claim, and you can see the whole run in the console.
 
 ```
  Email ─┐                      ┌─ Auto-resolve ─── grounded reply (email / SMS / chat)

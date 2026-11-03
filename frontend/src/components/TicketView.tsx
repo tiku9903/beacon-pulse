@@ -27,6 +27,13 @@ const EVENT_TEXT: Record<string, (d: Record<string, unknown>) => string> = {
   redrafted: () => 'Draft regenerated',
   safety_flag_changed: d => d.safety_flag ? 'Safety flag raised' : `Safety flag cleared: ${d.note}`,
   pipeline_error: () => 'Automation failed - routed to a person',
+  agent_start: d => `${String(d.specialist).replace('_', ' ')} took the case (${d.provider})`,
+  agent_tool: d => `AI called ${d.tool}${d.ok ? '' : ' (failed)'}`,
+  agent_transfer: d => `Transferred to ${d.to}`,
+  ai_reply: d => d.outcome === 'safety_escalation' ? 'AI escalated a safety risk' : `AI replied: ${String(d.outcome).replace('_', ' ')}${d.ms ? ` in ${(Number(d.ms) / 1000).toFixed(1)}s` : ''}`,
+  agent_draft: () => 'AI drafted a reply for review',
+  guardrail_blocked: () => 'Quality check blocked an AI reply',
+  agent_failed: () => 'AI unavailable - rules engine answered',
 }
 
 function clock(iso: string) { return new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) }
@@ -95,7 +102,7 @@ export default function TicketView({ id, onBack, onChange }: { id: number; onBac
           <div key={m.id} className={`msg ${m.direction} ${m.author_type === 'ai' || m.author_type === 'system' ? 'ai' : ''}`}>
             <div className="meta">
               {m.direction === 'internal' ? 'Internal note by ' : ''}{m.author_name ?? (m.direction === 'inbound' ? 'Customer' : 'Beacon')}
-              {m.author_type === 'ai' && ' (sent automatically)'}, {ago(m.created_at)}
+              {m.author_type === 'ai' && m.direction === 'outbound' && ' (sent automatically)'}, {ago(m.created_at)}
             </div>
             <div className="bubble">{m.body}</div>
           </div>
@@ -141,6 +148,13 @@ export default function TicketView({ id, onBack, onChange }: { id: number; onBac
       </div>
 
       <aside className="side">
+        {t.events.some(e => e.event === 'agent_start') && (
+          <section>
+            <h2>AI agent</h2>
+            <AgentTrace events={t.events} />
+          </section>
+        )}
+
         <section>
           <h2>Customer</h2>
           {t.customer ? (
@@ -211,5 +225,27 @@ export default function TicketView({ id, onBack, onChange }: { id: number; onBac
         </section>
       </aside>
     </div>
+  )
+}
+
+
+function AgentTrace({ events }: { events: TicketDetail['events'] }) {
+  const runs = events.filter(e => ['agent_start', 'agent_tool', 'agent_transfer', 'guardrail_blocked', 'ai_reply', 'agent_draft', 'agent_failed'].includes(e.event))
+  return (
+    <ol className="trace">
+      {runs.map(e => {
+        const d = e.data as Record<string, unknown>
+        if (e.event === 'agent_start') return <li key={e.id} className="trace-agent">{e.actor}<span>{String(d.provider)}</span></li>
+        if (e.event === 'agent_transfer') return <li key={e.id} className="trace-agent">{String(d.to)}<span>transferred</span></li>
+        if (e.event === 'agent_tool') return (
+          <li key={e.id} className={d.ok ? '' : 'bad'}>
+            <code>{String(d.tool)}</code> {Object.entries((d.args as Record<string, unknown>) || {}).map(([k, v]) => `${k}: ${String(v)}`).join(', ')}
+            {!d.ok && d.error ? <div className="small">{String(d.error)}</div> : null}
+          </li>)
+        if (e.event === 'guardrail_blocked') return <li key={e.id} className="bad">Reply blocked: {(d.problems as string[] || []).join('; ')}</li>
+        if (e.event === 'agent_failed') return <li key={e.id} className="bad">AI unavailable, rules engine used</li>
+        return <li key={e.id} className="trace-end">{e.event === 'agent_draft' ? 'Drafted for a human' : `Replied: ${String(d.outcome).replace('_', ' ')}`}{d.ms ? <span>{(Number(d.ms) / 1000).toFixed(1)}s, {String(d.model)}</span> : null}</li>
+      })}
+    </ol>
   )
 }

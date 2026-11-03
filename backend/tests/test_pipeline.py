@@ -139,7 +139,8 @@ def test_warranty_claim_checks_term_and_requests_replacement(client, sup):
     assert "5-year" in t["drafts"][-1]["body"]
 
 
-def test_agent_sends_draft_and_reclassifies(client, sup):
+def test_agent_sends_draft_and_reclassifies(client, sup, settings):
+    settings.auto_resolve_intents = "order_status,product_availability,store_policy"
     ref = web(client, "The downlights flicker with my dimmer, what should I do?")
     t = ticket(client, sup, ref)
     assert t["status"] == "awaiting_agent"

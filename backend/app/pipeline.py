@@ -221,8 +221,28 @@ def process(db: Session, t: Ticket, forced_intent: str | None = None, allow_auto
     why = routing.apply(db, t, c)
     log_event(db, t, "routed", AI, priority=t.priority, team=t.team, reasons=why)
 
-    # 5. Resolve
+    # 5. Resolve: AI agents when an LLM is configured, otherwise (or on any agent failure) the rules engine
     t2 = time.perf_counter()
+    handled = False
+    if s.agent_mode and not t.safety_flag:
+        from .agents.runtime import run_agents
+        handled = run_agents(db, t, c, customer, allow_auto)
+    if not handled:
+        _resolve_with_rules(db, t, c, customer, text, ctx_customer, allow_auto)
+
+    timings["resolve_ms"] = round((time.perf_counter() - t2) * 1000)
+    timings["total_ms"] = round((time.perf_counter() - t0) * 1000)
+    log_event(db, t, "pipeline_complete", AI, status=t.status, **timings)
+    db.commit()
+    _auto_approvals(db, t)
+    db.refresh(t)
+    return t
+
+
+def _resolve_with_rules(db: Session, t: Ticket, c: dict, customer, text: str, ctx_customer: dict,
+                        allow_auto: bool) -> None:
+    """Deterministic resolution: grounded templates, LLM (if any) only for agent drafts."""
+    s = get_settings()
     name = (customer.name if customer else None) or t.contact_name
     ents = t.entities or {}
     intent = t.intent
@@ -355,14 +375,6 @@ def process(db: Session, t: Ticket, forced_intent: str | None = None, allow_auto
         body, _ = engine.draft(text, c, context, responses.draft_generic(name))
         _new_draft(db, t, body)
         _queue(db, t)
-
-    timings["resolve_ms"] = round((time.perf_counter() - t2) * 1000)
-    timings["total_ms"] = round((time.perf_counter() - t0) * 1000)
-    log_event(db, t, "pipeline_complete", AI, status=t.status, **timings)
-    db.commit()
-    _auto_approvals(db, t)
-    db.refresh(t)
-    return t
 
 
 def _auto_approvals(db: Session, t: Ticket) -> None:

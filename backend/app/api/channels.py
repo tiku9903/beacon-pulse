@@ -140,8 +140,8 @@ def _chat_identity(session_id: str, token: str | None) -> dict:
 def chat_start(body: ChatStart):
     sid = uuid.uuid4().hex
     return {"session_id": sid, "token": _sign_session(sid, body.name, body.email), "name": body.name, "email": body.email,
-            "greeting": f"Hi {body.name.split()[0]}! I'm the Beacon Lighting assistant. Ask about an order, stock, "
-                        "returns, warranty or anything else - a specialist is here if you need one."}
+            "greeting": f"Hi {body.name.split()[0]}! I'm Beacon AI. I can check your orders, stock in every store, returns, "
+                        "warranty claims and troubleshooting, and bring in a specialist when you need one."}
 
 
 @router.post("/chat/{session_id}/messages")

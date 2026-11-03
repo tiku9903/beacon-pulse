@@ -25,6 +25,7 @@ def config(_: Agent = Depends(current_agent)):
         "ai_models": {"anthropic": [s.anthropic_model, s.anthropic_fast_model], "openai": [s.openai_model, s.openai_fast_model],
                       "groq": [s.groq_model, s.groq_fast_model], "gemini": [s.gemini_model, s.gemini_fast_model]},
         "automation_mode": s.automation_mode,
+        "agent_mode": bool(s.agent_mode and p),
         "auto_resolve_intents": sorted(s.auto_resolve_intent_set),
         "auto_resolve_min_confidence": s.auto_resolve_min_confidence,
         "refund_auto_approve_limit": s.refund_auto_approve_limit,
