@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: beacon_pulse
+      POSTGRES_USER: pulse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulse-local-only}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulse -d beacon_pulse"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://pulse:${POSTGRES_PASSWORD:-pulse-local-only}@db:5432/beacon_pulse
+      CORS_ORIGINS: http://localhost:8080
+    ports: ["8080:8000"]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  pgdata:

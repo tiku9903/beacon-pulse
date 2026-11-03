@@ -1,0 +1,1 @@
+{"root":["./src/api.ts","./src/main.tsx","./src/components/Bits.tsx","./src/components/ChatWidget.tsx","./src/components/TicketView.tsx","./src/pages/Analytics.tsx","./src/pages/Approvals.tsx","./src/pages/HelpCentre.tsx","./src/pages/Inbox.tsx","./src/pages/Login.tsx","./src/pages/Settings.tsx","./src/pages/Team.tsx"],"version":"5.9.3"}

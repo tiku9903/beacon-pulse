@@ -1,0 +1,30 @@
+# Render Blueprint (free tier): New > Blueprint > pick this repo > Apply.
+services:
+  - type: web
+    name: beacon-pulse
+    runtime: docker
+    plan: free                 # sleeps after 15 min idle; first visit after that takes ~1 min to wake
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: INBOUND_WEBHOOK_SECRET
+        generateValue: true
+      # Free tier has no persistent disk: SQLite is rebuilt and re-seeded with demo data on every
+      # restart. For data that persists, create a free Postgres at neon.tech and set DATABASE_URL to it.
+      - key: DATABASE_URL
+        value: sqlite:////tmp/beacon_pulse.db
+      - key: SEED_DEMO_DATA
+        value: "true"
+      # Free AI. Get a key at https://console.groq.com/keys (no card). Blank = built-in rules engine.
+      - key: AI_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      - key: AUTOMATION_MODE
+        value: live
+      - key: AUTO_RESOLVE_INTENTS
+        value: order_status,product_availability,store_policy
