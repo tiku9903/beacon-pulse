@@ -294,3 +294,14 @@ def test_only_supervisor_clears_safety(client, sup):
     assert client.post(f"/api/tickets/{t['id']}/safety", headers=agent, json={"safety_flag": False, "note": "fine"}).status_code == 403
     r = client.post(f"/api/tickets/{t['id']}/safety", headers=sup, json={"safety_flag": False, "note": "LED warm, normal"})
     assert r.json()["safety_flag"] is False
+
+
+def test_weak_production_secrets_are_replaced_not_fatal(settings):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    settings.environment, settings.jwt_secret, settings.inbound_webhook_secret = "production", "REPLACE_ME", "REPLACE_ME"
+    with TestClient(app) as c:
+        assert c.get("/api/health").status_code == 200
+    assert settings.jwt_secret != "REPLACE_ME" and len(settings.jwt_secret) >= 32
+    assert settings.inbound_webhook_secret != "REPLACE_ME"

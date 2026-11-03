@@ -25,7 +25,14 @@ async def lifespan(app: FastAPI):
         weak = [n for n, v, min_len in (("JWT_SECRET", s.jwt_secret, 32), ("INBOUND_WEBHOOK_SECRET", s.inbound_webhook_secret, 16))
                 if len(v) < min_len or any(x in v for x in ("dev-only", "change-me", "replace-with"))]
         if weak:
-            raise RuntimeError(f"Set strong values for {', '.join(weak)} before running in production")
+            # Never run with a guessable secret, but don't refuse to start either: use a random one.
+            # (Console logins reset on restart and inbound webhooks stay closed until a real value is set.)
+            import secrets
+            s.jwt_secret = s.jwt_secret if "JWT_SECRET" not in weak else secrets.token_urlsafe(48)
+            if "INBOUND_WEBHOOK_SECRET" in weak:
+                s.inbound_webhook_secret = secrets.token_urlsafe(32)
+            log.warning("%s missing or weak - generated a random value for this run. Set it in the host's "
+                        "environment settings to keep it stable.", ", ".join(weak))
     Base.metadata.create_all(engine)
     if s.seed_demo_data:
         from .seed import seed_all
